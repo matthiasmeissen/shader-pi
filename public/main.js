@@ -133,7 +133,7 @@ const socket = io.connect('http://localhost:3000')
 
 socket.on('update_frontend', (data) => {
     console.log("Data received from Python:", data);
-    if (data.u_parameter1 !== undefined) {
-        app.updateParameter(data.u_parameter1);
+    if (data && typeof data.value === 'number') {
+        app.updateParameter(data.value);
     }
 });

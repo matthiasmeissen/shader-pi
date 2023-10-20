@@ -16,9 +16,9 @@ sio.connect('http://localhost:3000')
 
 try:
     while True:
-        data = {"value": random.randint(0, 100)}
+        data = {"value": random.random()}
         sio.emit('data_from_python', data)
         time.sleep(2)
 except KeyboardInterrupt:
     print("Shutting down")
-    sio.disconnect
+    sio.disconnect()
