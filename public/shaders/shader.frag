@@ -3,6 +3,7 @@ precision mediump float;
 
 uniform vec2 u_resolution;
 uniform float u_time;
+uniform float u_parameter1;
 
 in vec2 v_uv;
 out vec4 fragColor;

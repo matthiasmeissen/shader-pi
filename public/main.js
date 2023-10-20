@@ -1,128 +1,139 @@
+class ShaderApp {
+    constructor(canvasElementId) {
+        this.canvas = document.getElementById(canvasElementId);
+        this.gl = this.canvas.getContext("webgl2");
+        if (!this.gl) {
+            console.log("WebGL 2 not supported by your browser.");
+        }
+        this.program = null;
+        this.timeUniform = null;
+        this.parameter1Uniform = null;
+        this.initialize();
+    }
+
+    async loadShader(url) {
+        const response = await fetch(url);
+        return response.text();
+    }
+
+    compileShader(type, source) {
+        const shader = this.gl.createShader(type);
+        this.gl.shaderSource(shader, source);
+        this.gl.compileShader(shader);
+
+        if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
+            console.error("Shader Compilation Error:", this.gl.getShaderInfoLog(shader));
+            this.gl.deleteShader(shader);
+            return null;
+        }
+
+        return shader;
+    }
+
+    async createShaderProgram(vertexShaderURL, fragmentShaderURL) {
+        const vsSource = await this.loadShader(vertexShaderURL);
+        const fsSource = await this.loadShader(fragmentShaderURL);
+
+        const vertexShader = this.compileShader(this.gl.VERTEX_SHADER, vsSource);
+        const fragmentShader = this.compileShader(this.gl.FRAGMENT_SHADER, fsSource);
+
+        if (!vertexShader || !fragmentShader) return null;
+
+        const program = this.gl.createProgram();
+        this.gl.attachShader(program, vertexShader);
+        this.gl.attachShader(program, fragmentShader);
+        this.gl.linkProgram(program);
+
+        this.gl.deleteShader(vertexShader);
+        this.gl.deleteShader(fragmentShader);
+
+        if (!this.gl.getProgramParameter(program, this.gl.LINK_STATUS)) {
+            console.error("Error linking shader program:", this.gl.getProgramInfoLog(program));
+        }
+
+        return program;
+    }
+
+    setupGeometryBuffers() {
+        const vertices = new Float32Array([
+            -1.0, 1.0,
+            -1.0, -1.0,
+            1.0, 1.0,
+            1.0, 1.0,
+            -1.0, -1.0,
+            1.0, -1.0
+        ])
+    
+        const vertexBuffer = this.gl.createBuffer()
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vertexBuffer)
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW)
+    
+        return vertexBuffer
+    }
+
+    resizeCanvas() {
+        this.canvas.style.width = window.innerWidth + "px"
+        this.canvas.style.height = window.innerHeight + "px"
+
+        let ratio = window.devicePixelRatio || 1
+        this.canvas.width = window.innerWidth * ratio
+        this.canvas.height = window.innerHeight * ratio
+
+        this.gl.useProgram(this.program)
+
+        const resolutionUniform = this.gl.getUniformLocation(this.program, 'u_resolution')
+        this.gl.uniform2f(resolutionUniform, this.canvas.width, this.canvas.height)
+
+        this.gl.viewport(0, 0, this.canvas.width, this.canvas.height)
+    }
+
+    updateParameter(value) {
+        this.gl.uniform1f(this.parameter1Uniform, value);
+    }
+
+    async initialize() {
+        const startTime = performance.now();
+
+        this.program = await this.createShaderProgram('shaders/shader.vert', 'shaders/shader.frag');
+        if (!this.program) return;
+
+        this.resizeCanvas();
+
+        this.timeUniform = this.gl.getUniformLocation(this.program, 'u_time');
+        this.parameter1Uniform = this.gl.getUniformLocation(this.program, 'u_parameter1');
+        
+        const vertexBuffer = this.setupGeometryBuffers();
+        const position = this.gl.getAttribLocation(this.program, 'position');
+
+        this.gl.useProgram(this.program);
+        this.gl.enableVertexAttribArray(position);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vertexBuffer);
+        this.gl.vertexAttribPointer(position, 2, this.gl.FLOAT, false, 0, 0);
+
+        const render = () => {
+            const currentTime = performance.now()
+            const elapsedTime = (currentTime - startTime) / 1000.0
+
+            this.gl.uniform1f(this.timeUniform, elapsedTime)
+            this.gl.clear(this.gl.COLOR_BUFFER_BIT || this.gl.DEPTH_BUFFER_BIT)
+            this.gl.drawArrays(this.gl.TRIANGLES, 0, 6)
+
+            requestAnimationFrame(render)
+        };
+
+        window.addEventListener('resize', () => this.resizeCanvas());
+        render();
+    }
+}
+
+const app = new ShaderApp('glCanvas');
+
+
 const socket = io.connect('http://localhost:3000')
 
 socket.on('update_frontend', (data) => {
-    console.log("Data received from Python:", data)
-})
-
-
-
-// Creat webgl canvas
-
-const canvas = document.getElementById("glCanvas")
-const gl = canvas.getContext("webgl2")
-
-if (!gl) {
-    console.log("WebGL 2 not supported by your browser.")
-}
-
-async function loadShader(url) {
-    const response = await fetch(url)
-    const data = await response.text()
-    return data
-}
-
-function compileShader(type, source) {
-    const shader = gl.createShader(type)
-    gl.shaderSource(shader, source)
-    gl.compileShader(shader)
-
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error("Shader Compilation Error:", gl.getShaderInfoLog(shader))
-        gl.deleteShader(shader)
-        return null
+    console.log("Data received from Python:", data);
+    if (data.u_parameter1 !== undefined) {
+        app.updateParameter(data.u_parameter1);
     }
-
-    return shader
-}
-
-async function createShaderProgram(vertexShaderURL, fragmentShaderURL) {
-    const vsSource = await loadShader(vertexShaderURL)
-    const fsSource = await loadShader(fragmentShaderURL)
-
-    const vertexShader = compileShader(gl.VERTEX_SHADER, vsSource)
-    const fragmentShader = compileShader(gl.FRAGMENT_SHADER, fsSource)
-
-    if (!vertexShader || !fragmentShader) return null
-
-    const program = gl.createProgram()
-    gl.attachShader(program, vertexShader)
-    gl.attachShader(program, fragmentShader)
-    gl.linkProgram(program)
-
-    gl.deleteShader(vertexShader)
-    gl.deleteShader(fragmentShader)
-
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        console.error("Error linking shader program:", gl.getProgramInfoLog(program))
-    }
-
-    return program
-}
-
-function setupGeometryBuffers() {
-    const vertices = new Float32Array([
-        -1.0, 1.0,
-        -1.0, -1.0,
-        1.0, 1.0,
-        1.0, 1.0,
-        -1.0, -1.0,
-        1.0, -1.0
-    ])
-
-    const vertexBuffer = gl.createBuffer()
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer)
-    gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW)
-
-    return vertexBuffer
-}
-
-function resizeCanvas(program) {
-    canvas.style.width = window.innerWidth + "px"
-    canvas.style.height = window.innerHeight + "px"
-
-    let ratio = window.devicePixelRatio || 1
-    canvas.width = window.innerWidth * ratio
-    canvas.height = window.innerHeight * ratio
-
-    gl.useProgram(program)
-
-    const resolutionUniform = gl.getUniformLocation(program, 'u_resolution')
-    gl.uniform2f(resolutionUniform, canvas.width, canvas.height)
-
-    gl.viewport(0, 0, canvas.width, canvas.height)
-}
-
-async function main() {
-    const startTime = performance.now()
-
-    const program = await createShaderProgram('shaders/shader.vert', 'shaders/shader.frag')
-    if (!program) return
-
-    resizeCanvas(program)
-
-    const vertexBuffer = setupGeometryBuffers()
-    const position = gl.getAttribLocation(program, 'position')
-    const timeUniform = gl.getUniformLocation(program, 'u_time')
-
-    gl.useProgram(program)
-    gl.enableVertexAttribArray(position)
-    gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer)
-    gl.vertexAttribPointer(position, 2, gl.FLOAT, false, 0, 0)
-
-    function render() {
-        const currentTime = performance.now()
-        const elapsedTime = (currentTime - startTime) / 1000.0
-
-        gl.uniform1f(timeUniform, elapsedTime)
-        gl.clear(gl.COLOR_BUFFER_BIT || gl.DEPTH_BUFFER_BIT)
-        gl.drawArrays(gl.TRIANGLES, 0, 6)
-
-        requestAnimationFrame(render)
-    }
-
-    window.addEventListener('resize', () => resizeCanvas(program))
-
-    render()
-}
-
-main()
+});
