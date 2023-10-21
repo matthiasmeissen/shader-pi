@@ -9,7 +9,17 @@
 <body>
     <canvas id="glCanvas"></canvas>
 
-    <input id="parameter1" type="range" min="0" max="1" step="0.01">
+    <div class="inputs">
+        <div class="type">
+            <p>GEN1</p>
+            <input id="parameter1" type="range" min="0" max="1" step="0.01">
+        </div>
+        <div class="connect"></div>
+        <div class="type">EFX</div>
+        <div class="connect"></div>
+        <div class="type">OUT</div>
+    </div>
+
 
     <script src="/socket.io/socket.io.js"></script>
     <script src="main.js"></script>

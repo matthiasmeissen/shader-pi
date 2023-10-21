@@ -1,5 +1,6 @@
 body {
     margin: 0;
+    font-family: sans-serif;
 }
 
 canvas {
@@ -8,8 +9,25 @@ canvas {
     height: 100vh;
 }
 
-#parameter1 {
+.inputs {
     position: fixed;
     top: 20px;
     left: 20px;
+    background-color: hsla(0, 0%, 100%, 0.5);
+    padding: 10px;
+    border-radius: 10px;
+}
+
+.type {
+    text-align: center;
+    padding: 12px;
+    border: 1px solid hsl(0deg, 0%, 0%);
+    border-radius: 8px;
+}
+
+.connect {
+    width: 2px;
+    height: 16px;
+    background-color: hsl(0deg, 0%, 0%);
+    margin-left: 50%;
 }

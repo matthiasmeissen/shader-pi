@@ -157,7 +157,7 @@ const inputParameter = document.getElementById("parameter1");
 
 inputParameter.addEventListener("input", (event) => {
     const value = parseFloat(event.target.value);
-    console.log("Input value changed:", value);
+    console.log(value);
     app.updateParameter(value);
 });
 
