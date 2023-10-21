@@ -29,6 +29,15 @@ class ShaderApp {
         this.setupBuffers();
         this.framebuffer = this.createFramebuffer(this.canvas.width, this.canvas.height);
 
+        this.uTimeLocation1 = this.gl.getUniformLocation(this.program1, "u_time");
+        this.uResolutionLocation1 = this.gl.getUniformLocation(this.program1, "u_resolution");
+        this.uParameterLocation = this.gl.getUniformLocation(this.program1, "u_parameter");
+
+        this.uTimeLocation2 = this.gl.getUniformLocation(this.program2, "u_time");
+        this.uResolutionLocation2 = this.gl.getUniformLocation(this.program2, "u_resolution");
+        this.uTextureLocation = this.gl.getUniformLocation(this.program2, "u_texture");
+
+
         this.render();
     }
 
@@ -96,6 +105,15 @@ class ShaderApp {
         return { framebuffer, texture };
     }
 
+    updateParameter(value) {
+        if (this.program1 && this.uParameterLocation !== undefined) {
+            this.gl.useProgram(this.program1);
+            this.gl.uniform1f(this.uParameterLocation, value);
+        } else {
+            console.error("Program not initialized or u_parameter location not found");
+        }
+    }
+
     render() {
         let currentTime = Date.now();
         let elapsedTime = (currentTime - this.startTime) / 1000.0; // Convert to seconds
@@ -104,8 +122,10 @@ class ShaderApp {
         this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.framebuffer.framebuffer);
         this.gl.useProgram(this.program1);
         this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
-        this.gl.uniform1f(this.gl.getUniformLocation(this.program1, "u_time"), elapsedTime);
-        this.gl.uniform2f(this.gl.getUniformLocation(this.program1, "u_resolution"), this.canvas.width, this.canvas.height);
+
+        this.gl.uniform1f(this.uTimeLocation1, elapsedTime);
+        this.gl.uniform2f(this.uResolutionLocation1, this.canvas.width, this.canvas.height);
+
         const position = this.gl.getAttribLocation(this.program1, "a_position");
         this.gl.vertexAttribPointer(position, 2, this.gl.FLOAT, false, 0, 0);
         this.gl.enableVertexAttribArray(position);
@@ -116,9 +136,11 @@ class ShaderApp {
         this.gl.useProgram(this.program2);
         this.gl.activeTexture(this.gl.TEXTURE0);
         this.gl.bindTexture(this.gl.TEXTURE_2D, this.framebuffer.texture);
-        this.gl.uniform1f(this.gl.getUniformLocation(this.program2, "u_time"), elapsedTime);
-        this.gl.uniform2f(this.gl.getUniformLocation(this.program2, "u_resolution"), this.canvas.width, this.canvas.height);
-        this.gl.uniform1i(this.gl.getUniformLocation(this.program2, "u_texture"), 0);
+
+        this.gl.uniform1f(this.uTimeLocation2, elapsedTime);
+        this.gl.uniform2f(this.uResolutionLocation2, this.canvas.width, this.canvas.height);
+        this.gl.uniform1i(this.uTextureLocation, 0);
+
         this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
 
         requestAnimationFrame(this.render.bind(this));
@@ -129,6 +151,14 @@ let app = null;
 
 document.addEventListener("DOMContentLoaded", () => {
     app = new ShaderApp("glCanvas");
+});
+
+const inputParameter = document.getElementById("parameter1");
+
+inputParameter.addEventListener("input", (event) => {
+    const value = parseFloat(event.target.value);
+    console.log("Input value changed:", value);
+    app.updateParameter(value);
 });
 
 const socket = io.connect('http://localhost:3000')
