@@ -1,133 +1,135 @@
 class ShaderApp {
-    constructor(canvasElementId) {
-        this.canvas = document.getElementById(canvasElementId);
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
         this.gl = this.canvas.getContext("webgl2");
         if (!this.gl) {
-            console.log("WebGL 2 not supported by your browser.");
+            console.error("Unable to initialize WebGL2. Your browser may not support it.");
+            return;
         }
-        this.program = null;
-        this.timeUniform = null;
-        this.parameter1Uniform = null;
-        this.initialize();
+
+        this.canvas.width = window.innerWidth;
+        this.canvas.height = window.innerHeight;
+        this.gl.viewport(0, 0, this.gl.canvas.width, this.gl.canvas.height);
+
+        this.startTime = Date.now();
+        this.init();
+    }
+
+    async init() {
+        const vertexShaderSource = await this.loadShader('shaders/shader.vert');
+        const fragmentShader1Source = await this.loadShader('shaders/shader1.frag');
+        const fragmentShader2Source = await this.loadShader('shaders/shader2.frag');
+
+        this.vertexShader = this.compileShader(vertexShaderSource, this.gl.VERTEX_SHADER);
+        this.fragmentShader1 = this.compileShader(fragmentShader1Source, this.gl.FRAGMENT_SHADER);
+        this.fragmentShader2 = this.compileShader(fragmentShader2Source, this.gl.FRAGMENT_SHADER);
+
+        this.program1 = this.createProgram(this.vertexShader, this.fragmentShader1);
+        this.program2 = this.createProgram(this.vertexShader, this.fragmentShader2);
+        this.setupBuffers();
+        this.framebuffer = this.createFramebuffer(this.canvas.width, this.canvas.height);
+
+        this.render();
     }
 
     async loadShader(url) {
         const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Failed to load shader from ${url}: ${response.statusText}`);
+        }
         return response.text();
     }
 
-    compileShader(type, source) {
+    compileShader(source, type) {
         const shader = this.gl.createShader(type);
         this.gl.shaderSource(shader, source);
         this.gl.compileShader(shader);
-
         if (!this.gl.getShaderParameter(shader, this.gl.COMPILE_STATUS)) {
-            console.error("Shader Compilation Error:", this.gl.getShaderInfoLog(shader));
+            console.error(this.gl.getShaderInfoLog(shader));
             this.gl.deleteShader(shader);
             return null;
         }
-
         return shader;
     }
 
-    async createShaderProgram(vertexShaderURL, fragmentShaderURL) {
-        const vsSource = await this.loadShader(vertexShaderURL);
-        const fsSource = await this.loadShader(fragmentShaderURL);
-
-        const vertexShader = this.compileShader(this.gl.VERTEX_SHADER, vsSource);
-        const fragmentShader = this.compileShader(this.gl.FRAGMENT_SHADER, fsSource);
-
-        if (!vertexShader || !fragmentShader) return null;
-
+    createProgram(vertexShader, fragmentShader) {
         const program = this.gl.createProgram();
         this.gl.attachShader(program, vertexShader);
         this.gl.attachShader(program, fragmentShader);
         this.gl.linkProgram(program);
-
-        this.gl.deleteShader(vertexShader);
-        this.gl.deleteShader(fragmentShader);
-
         if (!this.gl.getProgramParameter(program, this.gl.LINK_STATUS)) {
-            console.error("Error linking shader program:", this.gl.getProgramInfoLog(program));
+            console.error(this.gl.getProgramInfoLog(program));
+            this.gl.deleteProgram(program);
+            return null;
         }
-
         return program;
     }
 
-    setupGeometryBuffers() {
+    setupBuffers() {
         const vertices = new Float32Array([
+            -1.0, -1.0,
+            1.0, -1.0,
             -1.0, 1.0,
-            -1.0, -1.0,
+            -1.0, 1.0,
+            1.0, -1.0,
             1.0, 1.0,
-            1.0, 1.0,
-            -1.0, -1.0,
-            1.0, -1.0
-        ])
-    
-        const vertexBuffer = this.gl.createBuffer()
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vertexBuffer)
-        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW)
-    
-        return vertexBuffer
+        ]);
+
+        this.vertexBuffer = this.gl.createBuffer();
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
+        this.gl.bufferData(this.gl.ARRAY_BUFFER, vertices, this.gl.STATIC_DRAW);
     }
 
-    resizeCanvas() {
-        this.canvas.style.width = window.innerWidth + "px"
-        this.canvas.style.height = window.innerHeight + "px"
+    createFramebuffer(width, height) {
+        const framebuffer = this.gl.createFramebuffer();
+        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, framebuffer);
 
-        let ratio = window.devicePixelRatio || 1
-        this.canvas.width = window.innerWidth * ratio
-        this.canvas.height = window.innerHeight * ratio
+        const texture = this.gl.createTexture();
+        this.gl.bindTexture(this.gl.TEXTURE_2D, texture);
+        this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, width, height, 0, this.gl.RGBA, this.gl.UNSIGNED_BYTE, null);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR);
+        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR);
 
-        this.gl.useProgram(this.program)
+        const attachmentPoint = this.gl.COLOR_ATTACHMENT0;
+        this.gl.framebufferTexture2D(this.gl.FRAMEBUFFER, attachmentPoint, this.gl.TEXTURE_2D, texture, 0);
 
-        const resolutionUniform = this.gl.getUniformLocation(this.program, 'u_resolution')
-        this.gl.uniform2f(resolutionUniform, this.canvas.width, this.canvas.height)
-
-        this.gl.viewport(0, 0, this.canvas.width, this.canvas.height)
+        return { framebuffer, texture };
     }
 
-    updateParameter(value) {
-        this.gl.uniform1f(this.parameter1Uniform, value);
-    }
+    render() {
+        let currentTime = Date.now();
+        let elapsedTime = (currentTime - this.startTime) / 1000.0; // Convert to seconds
 
-    async initialize() {
-        const startTime = performance.now();
-
-        this.program = await this.createShaderProgram('shaders/shader.vert', 'shaders/shader.frag');
-        if (!this.program) return;
-
-        this.resizeCanvas();
-
-        this.timeUniform = this.gl.getUniformLocation(this.program, 'u_time');
-        this.parameter1Uniform = this.gl.getUniformLocation(this.program, 'u_parameter1');
-        
-        const vertexBuffer = this.setupGeometryBuffers();
-        const position = this.gl.getAttribLocation(this.program, 'position');
-
-        this.gl.useProgram(this.program);
-        this.gl.enableVertexAttribArray(position);
-        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, vertexBuffer);
+        // Set up rendering to framebuffer
+        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.framebuffer.framebuffer);
+        this.gl.useProgram(this.program1);
+        this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.vertexBuffer);
+        this.gl.uniform1f(this.gl.getUniformLocation(this.program1, "u_time"), elapsedTime);
+        this.gl.uniform2f(this.gl.getUniformLocation(this.program1, "u_resolution"), this.canvas.width, this.canvas.height);
+        const position = this.gl.getAttribLocation(this.program1, "a_position");
         this.gl.vertexAttribPointer(position, 2, this.gl.FLOAT, false, 0, 0);
+        this.gl.enableVertexAttribArray(position);
+        this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
 
-        const render = () => {
-            const currentTime = performance.now()
-            const elapsedTime = (currentTime - startTime) / 1000.0
+        // Set up rendering to screen
+        this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, null);
+        this.gl.useProgram(this.program2);
+        this.gl.activeTexture(this.gl.TEXTURE0);
+        this.gl.bindTexture(this.gl.TEXTURE_2D, this.framebuffer.texture);
+        this.gl.uniform1f(this.gl.getUniformLocation(this.program2, "u_time"), elapsedTime);
+        this.gl.uniform2f(this.gl.getUniformLocation(this.program2, "u_resolution"), this.canvas.width, this.canvas.height);
+        this.gl.uniform1i(this.gl.getUniformLocation(this.program2, "u_texture"), 0);
+        this.gl.drawArrays(this.gl.TRIANGLES, 0, 6);
 
-            this.gl.uniform1f(this.timeUniform, elapsedTime)
-            this.gl.clear(this.gl.COLOR_BUFFER_BIT || this.gl.DEPTH_BUFFER_BIT)
-            this.gl.drawArrays(this.gl.TRIANGLES, 0, 6)
-
-            requestAnimationFrame(render)
-        };
-
-        window.addEventListener('resize', () => this.resizeCanvas());
-        render();
+        requestAnimationFrame(this.render.bind(this));
     }
 }
 
-const app = new ShaderApp('glCanvas');
+let app = null;
 
+document.addEventListener("DOMContentLoaded", () => {
+    app = new ShaderApp("glCanvas");
+});
 
 const socket = io.connect('http://localhost:3000')
 
